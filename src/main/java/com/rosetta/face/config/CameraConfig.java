@@ -19,6 +19,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+// just for test
+// hahahah
+
 @Configuration
 @EnableWebSocketMessageBroker
 public class CameraConfig implements WebSocketMessageBrokerConfigurer {
