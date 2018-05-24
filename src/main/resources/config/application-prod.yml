@@ -1,0 +1,31 @@
+server:
+  port: 8082
+#  context-path: /prod
+
+spring:
+  logging:
+    level:
+      root: WARN
+
+static:
+  faviconRepoContext: $CONTEXT$
+  faviconRepoDir: /data/static/favicon
+  faviconRepoUrl: http://172.18.2.107:8081/static/favicon
+  faviconDefaultUrl: http://172.18.2.107:8081/static/favicon/00000000.jpg
+  faceRepoDir: /data/static/face
+
+camera:
+  list:
+      # 走廊
+    - id: 02
+      url: rtsp://admin:rosetta12345@172.18.6.92/h264/ch1/main/av_stream
+      # 前台
+    - id: 01
+      url: rtsp://admin:rosetta12345@172.18.6.93/h264/ch1/main/av_stream
+
+detector:
+  detectUrl: http://172.18.2.107:8080/webface/detect
+  recognizeUrl: http://172.18.2.107:8080/webface/recognize
+  featureUrl: http://172.18.2.107:8080/webface/feature
+
+

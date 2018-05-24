@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>考勤展示模块</title>
+  <!-- <link href="/webjars/bootstrap/css/bootstrap.min.css" rel="stylesheet"> -->
+  <!-- <script src="https://apps.bdimg.com/libs/jquery/2.1.4/jquery.min.js"></script> -->
+  <script src="https://cdn.bootcss.com/es6-promise/4.1.1/es6-promise.min.js"></script>
+  <script src="https://cdn.bootcss.com/vue/2.5.16/vue.min.js"></script>
+  <script src="lib/sockjs.min.js"></script>
+  <script src="lib/stomp.min.js"></script>
+  <link rel="stylesheet" href="lib/index.css">
+  <!-- <script src="/js/app.js"></script> -->
+</head>
+
+<body>
+  <!-- <noscript><h2 style="color: #ff0000">Seems your browser doesn't support Javascript! Websockets rely on Javascript being enabled. Please enable
+    Javascript and reload this page!</h2></noscript> -->
+  <div id="app">
+    <div class="photo clearfix">
+      <div class="photo1 float-left">
+        <h4 class="txt-center">Camera 01 Portraits 识别中<span class="icon-load"></span></h4>
+        <transition-group name="photo-list" class="clearfix" tag="ul">
+          <!-- <ul class="clearfix"> -->
+            <li
+              v-for="(item, index) in facesList[0]"
+              :key="item.feature_json"
+              class="photo-list-item">
+              <!-- @click="setAvatar(item)" -->
+              <div class="relative">
+                <!-- <div class="photo-list-cover txt-center">更新照片</div> -->
+                <div @click.stop="deleteOne(index, 0)" class="icon-close"></div>
+                <!-- <img :src="'data:image/jpeg;base64,' + item.image" alt=""> -->
+                <figure>
+                  <img :src="item.favicon_url" alt="">
+                  <figcaption>
+                    <p>{{item.name}}</p>
+                  </figcaption>
+                </figure>
+                <!-- <p class="namehold">{{item.name}}</p> -->
+              </div>
+            </li>
+          <!-- </ul> -->
+        </transition-group>
+      </div>
+      <div class="photo2 float-right">
+        <h4 class="txt-center">Camera 02 Portraits 识别中<span class="icon-load"></span></h4>
+        <transition-group name="photo-list" class="clearfix" tag="ul">
+          <li
+            v-for="(item, index) in facesList[1]"
+            :key="item.feature_json"
+            class="photo-list-item">
+            <div class="relative">
+              <div @click="deleteOne(index, 1)" class="icon-close"></div>
+              <!-- <img :src="'data:image/jpeg;base64,' + item.image" alt=""> -->
+              <!-- <img :src="'//172.18.6.42:8080/' + item.thumbnail" alt=""> -->
+              <figure>
+                <img :src="item.favicon_url" alt="">
+                <figcaption>
+                  <p>{{item.name}}</p>
+                </figcaption>
+              </figure>
+            </div>
+          </li>
+        </transition-group>
+      </div>
+    </div>
+
+    <!-- <div class="control txt-center">
+      <button v-if="isInterval[0] === false" @click="beginGetPics(0)">开始采集1</button>
+      <button v-else @click="stopGetPics(0)">结束</button>
+      <button v-if="isInterval[1] === false" @click="beginGetPics(1)">开始采集2</button>
+      <button v-else @click="stopGetPics(1)">结束</button>
+      <br>
+      <button @click="isAlert = true, postNum = 0">保存1</button>
+      <button @click="isAlert = true, postNum = 1">保存2</button>
+      <p>考勤人脸AI识别 —— 罗塞塔实验室</p>
+    </div> -->
+
+    <div class="modal" v-if="isAlert">
+      <div class="modal-content txt-center">
+        <br>
+        <input type="file" id="file" name="file">
+        <br>
+        <br>
+        <progress id="progressbar" value="0" max="100" style="width:280px;"></progress>
+        <div>
+          <button class="button-info">上传</button>
+          <button @click="isAlert = false">取消</button>
+        </div>
+        <div id="fileimg">
+          <div id="loading-cover"></div>
+          <div id="showloading"></div>
+        </div>
+        <!-- <br>
+        <label for="">姓名：</label><input v-model="postName" type="text">
+        <br>
+        <br>
+        <label for="">id：</label><input v-model="postId" type="text">
+        <br>
+        <br>
+        <button @click="postSave(postId, postName, postNum)">确认</button><button @click="isAlert = false">取消</button> -->
+      </div>
+    </div>
+
+    <div class="bottom">
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="float-left width-6">
+      <canvas id="canvas" width="360" height="240"></canvas>
+    </div>
+    <div class="float-right width-6">
+      <canvas id="canvas2" width="360" height="240"></canvas>
+    </div>
+    <!-- <img id="frame" width="720" src="/img/spring.jpg"> -->
+  </div>
+
+  <script>
+    var stompClient = null;
+    // socketUrl = '//172.18.6.42:8080/kaoqin-preview-websocket';
+    var socketUrl = '/video/api/websocket/preview';
+    var getUrl = '/get-persons';
+    var saveUrl = '/save-person';
+    var msgPath = '/camera/01';
+    var msgPath2 = '/camera/02';
+    var $frame = document.getElementById('frame');
+    var $canvas = document.getElementById('canvas');
+    var $2d = document.getElementById('canvas').getContext('2d');
+    var $2d2 = document.getElementById('canvas2').getContext('2d');
+
+    var IMG = new Image();
+    var IMG2 = new Image();
+    IMG.onload = function() {
+      $2d.drawImage(IMG, 0, 0, $2d.canvas.width, $2d.canvas.height);
+      //after drawing set src empty
+      IMG.src = '';
+    }
+    IMG2.onload = function() {
+      $2d2.drawImage(IMG2, 0, 0, $2d2.canvas.width, $2d2.canvas.height);
+      //after drawing set src empty
+      IMG2.src = '';
+    }
+
+    function connect() {
+      var socket = new SockJS(socketUrl);
+      stompClient = Stomp.over(socket);
+      stompClient.connect({}, function(frame) {
+        // console.log('Connected: ' + frame);
+        successCallback(0);
+        successCallback(1);
+      }, function() {
+        connect();
+      });
+    }
+
+    function successCallback(num) {
+      var t = [msgPath, msgPath2]
+      var tt = [$2d, $2d2]
+      var ttt = [IMG, IMG2]
+      stompClient.subscribe(t[num], function(greeting) {
+        // $("#frame").attr("src", "data:image/jpeg;base64," + greeting.body);
+        // setImg(greeting.body);
+        ttt[num].src = 'data:image/jpeg;base64,' + greeting.body;
+      });
+    }
+
+    function disconnect() {
+      if (stompClient !== null) {
+        stompClient.disconnect();
+      }
+      console.log("Disconnected");
+    }
+
+    connect()
+
+    ////////////////////////////////////////////////////////////////////////
+    // Clock
+
+    ////////////////////////////////////////////////////////////////////////
+    // vue
+    var app = new Vue({
+      el: '#app',
+      data: function() {
+        return {
+          postName: '',
+          postId: 0,
+          postNum: 0,
+          isFetching: false,
+          isInterval: [false, false],
+          isAlert: false,
+          facesList: [
+            // [{
+            //   person_id: 12,
+            //   name: 'xxx',
+            //   thumbnail: '//placehold.it/75x75',
+            //   rect: '11'
+            // }, {
+            //   person_id: 11,
+            //   name: 'xxx',
+            //   thumbnail: '//placehold.it/75x75',
+            //   rect: '22'
+            // }]
+          ],
+          faceList1: [
+            // {
+            //   "rect":[969,180,308,394],
+            //   "image":"",
+            //   "feature":null,
+            //   "similarity":null,
+            //   "name":null,
+            //   "thumbnail":null,
+            //   "person_id":null
+            // }
+          ],
+          faceList2: [],
+          personList1: [
+            {
+              id: '23',
+              name: 'xxx'
+            }, {
+              id: '22',
+              name: ''
+            }, {
+              id: '33',
+              name: 'yyy'
+            }, {
+              id: '333',
+              name: 'yyy'
+            }, {
+              id: '444',
+              name: 'yyy'
+            }
+          ],
+          max15List1: [],
+          savedList1: [],
+          personList2: [
+            {
+              id: '23',
+              name: 'xxx'
+            }, {
+              id: '22',
+              name: ''
+            }, {
+              id: '33',
+              name: 'yyy'
+            }, {
+              id: '333',
+              name: 'yyy'
+            }, {
+              id: '444',
+              name: 'yyy'
+            }
+          ]
+        }
+      },
+      created: function () {
+        window.timers = {}
+      },
+      mounted: function () {
+        this.beginGetPics(0)
+        this.beginGetPics(1)
+      },
+      methods: {
+        beginGetPics: function (num) {
+          this.isInterval[num] = true
+          this.$forceUpdate()
+
+          // window.inter = true
+          window.timers[num] = setInterval(function () {
+            this.getPics(num)
+          }.bind(this), 1000)
+        },
+        stopGetPics: function (num) {
+          this.isInterval[num] = false
+          this.$forceUpdate()
+
+          // window.inter = null
+          clearInterval(window.timers[num])
+        },
+        getPics: function(num) {
+          // if (!window.inter) {
+          //   return
+          // }
+          this.isFetching = true
+
+          var t = ['01', '02', '03']
+          var _num = num
+          if (!this.facesList[_num]) {
+            this.facesList[_num] = []
+          }
+          // 清除超时对象
+          //
+          var _time = new Date().getTime()
+          for (var i = 0; i < this.facesList[_num].length; i++) {
+            console.log('face timestamp:', this.facesList[_num][i].tstamp)
+            if (this.facesList[_num][i].tstamp + 5000 < _time) {
+              this.facesList[_num].splice(i, 1)
+              this.$forceUpdate()
+            }
+          }
+
+          // 获取头像返回
+          fetch('/attend/api/'+ t[_num] +'/recog', {
+            method: 'POST',
+            mode: 'cors',
+            credentials: 'include'
+          })
+            .then(response => {
+              return response.json()
+            })
+            .then(json => {
+              // console.log('face l: ', json.data.face.length)
+              var d = json.data.face
+              if (d && d.length > 0) {
+                for (var i = 0; i < d.length; i++) {
+                  var flag = false
+
+                  // 剔除重复人员
+                  for (var j = 0; j < this.facesList[_num].length; j++) {
+                    if (d[i].person_id === this.facesList[_num][j].person_id) {
+                      // if (d[i].thumbnail !== his.facesList[_num][j].thumbnail) {
+                        this.facesList[_num].splice(j, 1)
+                      // } else {
+                        // flag = true
+                      // }
+                    }
+                  }
+
+                  if (!flag) {
+                    // 添加新人员
+                    d[i].tstamp = new Date().getTime()
+                    this.facesList[_num].push(d[i])
+                    // 超过15人，剔除多余人员
+                    if (this.facesList[_num].length > 15) {
+                      this.facesList[_num].shift()
+                    }
+                  }
+                }
+                this.$forceUpdate()
+              }
+
+              this.isFetching = false
+            })
+            .catch(e => {
+              console.error(e)
+              this.isFetching = false
+            })
+        },
+        setAvatar: function (item) {
+          this.isAlert = true
+        },
+        postAvatar: function(id, name, num) {
+          if (!this.facesList[num] || this.facesList[num].length < 1) {
+            alert('没有相关照片，无法提交！')
+            this.isAlert = false
+            return
+          }
+          // 保存用户头像
+          fetch('/collect/api/save/person', {
+            method: 'POST',
+            // headers: {'Content-Type': 'multipart/form-data; charset = utf-8'},
+            body: new FormData(form),
+            mode: 'cors',
+            credentials: 'include'
+          })
+            .then(response => {
+              return response.json()
+            })
+            .then(json => {
+              console.log(json)
+              if (json.code == 200) {
+                this.facesList[num] = []
+                this.$forceUpdate()
+                this.isAlert = false
+                alert('提交成功！')
+              }
+              // this.cdnArr = json
+              // this.isRequest = false
+            })
+            .catch(e => {
+              console.error(e)
+              alert(e)
+            })
+        },
+
+        deleteOne: function(index, num) {
+          this.facesList[num].splice(index, 1)
+          this.$forceUpdate()
+        }
+      }
+    })
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>考勤采集模块</title>
+  <!-- <link href="/webjars/bootstrap/css/bootstrap.min.css" rel="stylesheet"> -->
+  <!-- <script src="https://apps.bdimg.com/libs/jquery/2.1.4/jquery.min.js"></script> -->
+  <script src="https://cdn.bootcss.com/es6-promise/4.1.1/es6-promise.min.js"></script>
+  <script src="https://cdn.bootcss.com/vue/2.5.16/vue.min.js"></script>
+  <script src="lib/sockjs.min.js"></script>
+  <script src="lib/stomp.min.js"></script>
+  <!-- <link rel="stylesheet" href="https://cdn.bootcss.com/hack/0.8.1/hack.css">
+  <link rel="stylesheet" href="https://cdn.bootcss.com/hack/0.8.1/standard.css"> -->
+  <link rel="stylesheet" href="lib/index.css">
+  <!-- <script src="/js/app.js"></script> -->
+</head>
+
+<body class="standard">
+  <!-- <noscript><h2 style="color: #ff0000">Seems your browser doesn't support Javascript! Websockets rely on Javascript being enabled. Please enable
+    Javascript and reload this page!</h2></noscript> -->
+  <div id="app">
+    <div class="photo clearfix">
+      <div class="photo1 float-left">
+        <h4 class="txt-center">Camera 01 Portraits <span v-if="isInterval[0] === true">采集中<span class="icon-load"></span></span></h4>
+        <transition-group name="photo-list" class="clearfix" tag="ul">
+          <!-- <ul class="clearfix"> -->
+            <li
+              v-for="(item, index) in maxFacesList(0)"
+              :key="item.feature_json"
+              class="photo-list-item">
+              <div class="relative">
+                <div @click="deleteOne(index, 0)" class="icon-close"></div>
+                <img :src="'data:image/jpeg;base64,' + item.image_base64" alt="">
+              </div>
+            </li>
+          <!-- </ul> -->
+        </transition-group>
+      </div>
+      <div class="photo2 float-right">
+        <h4 class="txt-center">Camera 02 Portraits <span v-if="isInterval[1] === true">采集中<span class="icon-load"></span></span></h4>
+        <transition-group name="photo-list" class="clearfix" tag="ul">
+          <li
+            v-for="(item, index) in maxFacesList(1)"
+            :key="item.feature_json"
+            class="photo-list-item">
+            <div class="relative">
+              <div @click="deleteOne(index, 1)" class="icon-close"></div>
+              <img :src="'data:image/jpeg;base64,' + item.image_base64" alt="">
+            </div>
+          </li>
+        </transition-group>
+      </div>
+    </div>
+
+    <div class="control txt-center">
+      <div>
+        <button class="button-blue" v-if="isInterval[0] === false" @click="beginGetPics(0)">开始采集1</button>
+        <button v-else @click="stopGetPics(0)">结束</button>
+        <button class="button-blue" v-if="isInterval[1] === false" @click="beginGetPics(1)">开始采集2</button>
+        <button v-else @click="stopGetPics(1)">结束</button>
+      </div>
+      <!-- <button v-if="!isFetching" @click="getPics">开始识别</button>
+      <button v-else disabled="disabled">采集中</button> -->
+      <div>
+        <button class="button-green" @click="isAlert = true, postNum = 0">保存1</button>
+        <button class="button-green" @click="isAlert = true, postNum = 1">保存2</button>
+      </div>
+      <div class="control-extra">
+        <button @click="location.reload();" class="button-ghost">刷新<span class="icon-load"></span></button>
+      </div>
+      <p>考勤人脸AI识别 —— 罗塞塔实验室</p>
+    </div>
+
+    <div class="modal" v-if="isAlert">
+      <div class="modal-content txt-center">
+        <br>
+        <label class="txt-right" for="">姓名：</label><input v-model="postName" type="text">
+        <br>
+        <br>
+        <label class="txt-right" for="">id：</label><input v-model="postId" type="text">
+        <!-- <label for="">id：</label><input type="text" onkeyup="this.value = this.value.replace(/[^0-9]/g,'');"> -->
+        <br>
+        <br>
+        <input
+          type="file"
+          accept="image/gif,image/jpeg,image/jpg,image/png"
+          @change="addFile">
+      </div>
+      <div class="txt-center">
+        <button @click="postSave2(postId, postName, postNum)" class="button-info">确认</button><button @click="isAlert = false">取消</button>
+      </div>
+    </div>
+
+    <div class="bottom">
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="float-left width-6">
+      <canvas id="canvas" width="360" height="240"></canvas>
+    </div>
+    <div class="float-right width-6">
+      <canvas id="canvas2" width="360" height="240"></canvas>
+    </div>
+    <!-- <img id="frame" width="720" src="/img/spring.jpg"> -->
+  </div>
+
+  <script>
+    var stompClient = null;
+    // socketUrl = '//172.18.6.42:8080/kaoqin-preview-websocket';
+    var socketUrl = '/video/api/websocket/preview';
+    var getUrl = '/get-persons';
+    var saveUrl = '/save-person';
+    var msgPath = '/camera/01';
+    var msgPath2 = '/camera/02';
+    var $frame = document.getElementById('frame');
+    var $canvas = document.getElementById('canvas');
+    var $2d = document.getElementById('canvas').getContext('2d');
+    var $2d2 = document.getElementById('canvas2').getContext('2d');
+
+    var IMG = new Image();
+    var IMG2 = new Image();
+    IMG.onload = function() {
+      $2d.drawImage(IMG, 0, 0, $2d.canvas.width, $2d.canvas.height);
+      //after drawing set src empty
+      IMG.src = '';
+    }
+    IMG2.onload = function() {
+      $2d2.drawImage(IMG2, 0, 0, $2d2.canvas.width, $2d2.canvas.height);
+      //after drawing set src empty
+      IMG2.src = '';
+    }
+
+    function connect() {
+      var socket = new SockJS(socketUrl);
+      stompClient = Stomp.over(socket);
+      stompClient.connect({}, function(frame) {
+        // console.log('Connected: ' + frame);
+        successCallback(0);
+        successCallback(1);
+      }, function() {
+        connect();
+      });
+    }
+
+    function successCallback(num) {
+      var t = [msgPath, msgPath2]
+      var tt = [$2d, $2d2]
+      var ttt = [IMG, IMG2]
+      stompClient.subscribe(t[num], function(greeting) {
+        // $("#frame").attr("src", "data:image/jpeg;base64," + greeting.body);
+        // setImg(greeting.body);
+        ttt[num].src = 'data:image/jpeg;base64,' + greeting.body;
+      });
+    }
+
+    function disconnect() {
+      if (stompClient !== null) {
+        stompClient.disconnect();
+      }
+      console.log("Disconnected");
+    }
+
+    // cd()
+
+    ////////////////////////////////////////////////////////////////////////
+    // vue
+    var app = new Vue({
+      el: '#app',
+      data: function() {
+        return {
+          postName: '',
+          postId: '',
+          postNum: 0,
+          fileIndex: '',
+          isFetching: false,
+          isInterval: [false, false],
+          isAlert: false,
+          facesList: [], // main
+          faceList1: [
+            // {
+            //   "rect":[969,180,308,394],
+            //   "image":"",
+            //   "feature":null,
+            //   "similarity":null,
+            //   "name":null,
+            //   "thumbnail":null,
+            //   "person_id":null
+            // }
+          ],
+          faceList2: [],
+          personList1: [
+            {
+              id: '23',
+              name: 'xxx'
+            }, {
+              id: '22',
+              name: ''
+            }, {
+              id: '33',
+              name: 'yyy'
+            }, {
+              id: '333',
+              name: 'yyy'
+            }, {
+              id: '444',
+              name: 'yyy'
+            }
+          ],
+          max15List1: [],
+          savedList1: [],
+        }
+      },
+      created: function () {
+        // this.getPics()
+        window.timers = {}
+      },
+      mounted: function () {
+        connect();
+
+        // window.inter = new Boolean()
+      },
+      methods: {
+        beginGetPics: function (num) {
+          this.isInterval[num] = true
+          this.$forceUpdate()
+
+          // window.inter = true
+          window.timers[num] = setInterval(function () {
+            this.getPics(num)
+          }.bind(this), 500)
+        },
+        stopGetPics: function (num) {
+          this.isInterval[num] = false
+          this.$forceUpdate()
+
+          // window.inter = null
+          clearInterval(window.timers[num])
+        },
+        getPics: function(num) {
+          // if (!window.inter) {
+          //   return
+          // }
+          this.isFetching = true
+
+          var t = ['01', '02', '03']
+          var _num = num
+          if (!this.facesList[_num]) {
+            this.facesList[_num] = []
+          }
+
+          // 获取头像返回
+          fetch('/collect/api/'+ t[_num] +'/detect', {
+            method: 'POST',
+            mode: 'cors',
+            credentials: 'include'
+          })
+            .then(response => {
+              return response.json()
+            })
+            .then(json => {
+              // console.log('face l: ', json.data.face.length)
+              var d = json.data.face
+              if (d && d.length > 0) {
+                this.facesList[_num] = this.facesList[_num].concat(d)
+                this.$forceUpdate()
+                // console.log(this.faceList1)
+              }
+
+              if (this.facesList[_num].length >= 15) {
+                this.stopGetPics(num)
+              }
+              // this.cdnArr = json
+              // this.isRequest = false
+              this.isFetching = false
+            })
+            .catch(e => {
+              console.error(e)
+              this.isFetching = false
+            })
+        },
+        addFile: function (event) {
+          if(event.target.files.length>0){
+            this.fileIndex = event.target.files[0];  //提交的图片
+            // this.$conf.getBase64(event.target,(url)=>{
+            //   this.imgDataUrl = 'data:image/png;base64,'+url;   //显示的图片
+            // });
+          }
+        },
+        postSave2: function(id, name, num) {
+          if (!this.facesList[num] || this.facesList[num].length < 1) {
+            alert('没有相关照片，无法提交！')
+            return
+          }
+          if (id === '' || id === undefined) {
+            alert('请输入员工id')
+            return
+          }
+          var fd = new FormData()
+          fd.append('favicon', this.fileIndex)
+          fd.append('person_id', id)
+          fd.append('name', name)
+          fd.append('face', JSON.stringify(this.facesList[num].slice(0, 15)))
+
+          var t = ['01', '02', '03']
+          // 保存用户头像
+          fetch('/collect/api/'+ t[num] +'/save/person', {
+            method: 'POST',
+            body: fd,
+            mode: 'cors',
+            credentials: 'include'
+          })
+            .then(response => {
+              return response.json()
+            })
+            .then(json => {
+              console.log(json)
+              if (json.code == 200) {
+                this.facesList[num] = []
+                this.$forceUpdate()
+                this.isAlert = false
+                alert('提交成功！')
+              } else {
+                alert(json.code)
+              }
+              // this.cdnArr = json
+              // this.isRequest = false
+            })
+            .catch(e => {
+              console.error(e)
+              alert(e)
+            })
+        },
+        postSave: function(id, name, num) {
+          if (!this.facesList[num] || this.facesList[num].length < 1) {
+            alert('没有相关照片，无法提交！')
+            this.isAlert = false
+            return
+          }
+          // 保存用户头像
+          fetch('/collect/api/save/person', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              person_id: id,
+              name: name,
+              data: { 'face': this.facesList[num].slice(0, 15) }
+            }),
+            mode: 'cors',
+            credentials: 'include'
+          })
+            .then(response => {
+              return response.json()
+            })
+            .then(json => {
+              console.log(json)
+              if (json.code == 200) {
+                this.facesList[num] = []
+                this.$forceUpdate()
+                this.isAlert = false
+                alert('提交成功！')
+              }
+              // this.cdnArr = json
+              // this.isRequest = false
+            })
+            .catch(e => {
+              console.error(e)
+              alert(e)
+            })
+        },
+        maxFacesList: function(num) {
+          if (!this.facesList[num]) {
+            this.facesList[num] = []
+          }
+          return this.facesList[num].slice(0, 15)
+        },
+        deleteOne: function(index, num) {
+          this.facesList[num].splice(index, 1)
+          this.$forceUpdate()
+        }
+      }
+    })
+  </script>
+</body>
+
+</html>

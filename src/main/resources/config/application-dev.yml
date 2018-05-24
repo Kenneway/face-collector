@@ -1,0 +1,30 @@
+server:
+  port: 8082
+#  context-path: /dev
+
+spring:
+  logging:
+    level:
+      root: WARN
+
+static:
+  faviconRepoContext: $CONTEXT$
+  faviconRepoDir: /home/czj/3-data/online/static/favicon
+  faviconRepoUrl: http://172.18.6.42:8081/static/favicon
+  faviconDefaultUrl: http://172.18.6.42:8081/static/favicon/00000000.jpg
+  faceRepoDir: /home/czj/3-data/online/static/face
+
+camera:
+  list:
+#    - id: 01
+#      url: rtsp://admin:rosetta12345@172.18.6.88/h264/ch1/main/av_stream
+    - id: 02
+      url: rtsp://admin:rosetta12345@172.18.6.89/h264/ch1/main/av_stream
+
+detector:
+  detectUrl: http://172.18.2.107:8080/webface/detect
+  recognizeUrl: http://172.18.2.107:8080/webface/recognize
+  featureUrl: http://172.18.2.107:8080/webface/feature
+
+
+

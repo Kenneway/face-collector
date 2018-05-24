@@ -1,0 +1,53 @@
+spring:
+  profiles:
+    active: dev
+
+  servlet:
+    multipart:
+      max-file-size: -1
+      max-request-size: -1
+
+  datasource:
+    drive-class-name: com.mysql.jdbc.Driver
+    url: jdbc:mysql://10.10.198.186:3306/face_attendancer?characterEncoding=utf-8
+    username: root
+    password: shr0$ett@l@b
+    testOnBorrow: true
+    testWhileIdle: true
+    validationQuery: SELECT 1
+    timeBetweenEvictionRunsMillis: 28000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+#    show-sql: true
+    show-sql: false
+
+server:
+  tomcat:
+    # Maximum size, in bytes, of the HTTP post content.
+    max-http-post-size: -1
+
+file-server:
+  ip: 172.18.2.107
+
+  ftp:
+    port: 21
+    username: lab
+    password: lab
+
+  nginx:
+    port: 8081
+    staticPath: /data/static
+    staticUrl: http://${file-server.ip}:${file-server.nginx.port}/static
+
+    faviconPath: ${file-server.nginx.staticPath}/favicon
+    faviconUrl: ${file-server.nginx.staticUrl}/favicon
+    faviconDefaultName: 00000000.jpg
+
+    faceUrl: ${file-server.nginx.staticUrl}/face
+    facePath: ${file-server.nginx.staticPath}/face
+
+
+
+

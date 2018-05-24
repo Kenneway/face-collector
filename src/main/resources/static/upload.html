@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" /> 
+    <title>文件上传</title>
+    <link href="css/upload.css" rel="stylesheet"/>
+    <script type="text/javascript" src="js/jquery-3.3.1.js"></script>
+    <script type="text/javascript">
+		$(function(){
+			// 清空form
+			$('#clear').on('click',function(){
+				$(':input','#form') 
+					.not(':button, :submit, :reset, :hidden') 
+					.val('') 
+					.removeAttr('checked') 
+					.removeAttr('selected');
+			});
+			// 提交form
+			$('#tijiao').on('click',function(){
+				var personId = $('input[name="person_id"]').val();
+				var name = $('input[name="name"]').val();
+				var favicon = $('input[name="favicon"]').val();
+				var face = $('input[name="face"]').val();
+				
+				if(personId && name && face){
+					// alert(222);
+					$('#form').submit();
+				}else{
+					alert('请输入');
+				}
+			});
+		})
+    </script>
+</head>
+<body>
+    <div class="panel panel-primary test">
+        <div class="panel-heading">
+            <h3 class="panel-title">文件上传</h3>
+        </div>
+		<form method="post" action="/collect/api/file/save/person" id="form" enctype="multipart/form-data">
+			<div class="form-group">
+				<label>person_id</label>
+				<input type="text" class="form-control" name="person_id" placeholder="请输入id" />     
+			</div>  
+			<div class="form-group">
+				<label>name</label>
+				<input type="text" class="form-control" name="name" placeholder="请输入name" />     
+			</div> 	
+			<div class="form-group">
+				<label>favicon</label>
+				<input type="file" class="form-control" name="favicon" placeholder="上传favicon" />     
+			</div> 	
+			<div class="form-group">  
+				<label>face</label>
+				<input type="file" class="form-control" multiple="multiple" name="face" placeholder="上传图片" />     
+			</div> 
+			<div class="form-group">  
+				<input type="button" id="tijiao" name="tijiao" value="提交" />  
+				<input type="button" name="clear" id="clear" value="清空" />
+			</div> 	
+        </form>
+    </div>
+
+</body>
+</html>
